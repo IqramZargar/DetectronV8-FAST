@@ -1,0 +1,1358 @@
+{% extends 'base.html' %}
+{% block title %}Detect — YOLOv8{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a2e;
+    --primary: #2563eb;
+    --primary-light: #60a5fa;
+    --text: #f8fafc;
+    --muted: rgba(248, 250, 252, 0.72);
+    --card-border: rgba(96, 165, 250, 0.18);
+    --panel-border: rgba(255, 255, 255, 0.05);
+  }
+
+  .detect-page {
+    position: relative;
+    z-index: 0;
+    width: 100%;
+    min-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    color: var(--text);
+  }
+
+  .background-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .detect-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .detect-header h1 {
+    margin: 0;
+    font-size: clamp(1.6rem, 4vw, 2.45rem);
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+  }
+
+  .detect-header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.96rem;
+    line-height: 1.6;
+  }
+
+  .detect-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .panel {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    border-radius: 18px;
+    padding: 1rem;
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.08), transparent 24%), var(--surface);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+  }
+
+  .upload-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .upload-form {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .upload-box {
+    position: relative;
+    width: 100%;
+    min-height: 300px;
+    overflow: hidden;
+    border: 2px dashed rgba(37, 99, 235, 0.5);
+    border-radius: 12px;
+    background: rgba(37, 99, 235, 0.05);
+    cursor: pointer;
+    transition: border-color 0.25s ease, background-color 0.25s ease, transform 0.25s ease;
+  }
+
+  .upload-box:hover,
+  .upload-box.is-dragover {
+    border-color: #2563eb;
+    background: rgba(37, 99, 235, 0.09);
+  }
+
+  .upload-box.is-dragover {
+    border-style: solid;
+    border-color: #60a5fa;
+    background: rgba(37, 99, 235, 0.15);
+    box-shadow: 0 0 24px rgba(37, 99, 235, 0.45);
+    transform: scale(1.02);
+  }
+
+  .upload-stage {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+
+  .upload-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+
+  .upload-empty.is-hidden {
+    opacity: 0;
+    transform: scale(0.98);
+    pointer-events: none;
+  }
+
+  .upload-empty i {
+    font-size: clamp(3.5rem, 8vw, 5rem);
+    color: #60a5fa;
+    text-shadow: 0 0 18px rgba(96, 165, 250, 0.3);
+  }
+
+  .upload-empty h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: clamp(1.1rem, 3vw, 1.4rem);
+    font-weight: 800;
+  }
+
+  .upload-empty p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.94rem;
+  }
+
+  .upload-preview {
+    position: absolute;
+    inset: 0;
+    display: none;
+  }
+
+  .upload-preview.is-visible {
+    display: block;
+  }
+
+  .upload-preview img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .image-meta {
+    display: none;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .image-meta.is-visible {
+    display: flex;
+  }
+
+  .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    background: rgba(15, 15, 15, 0.65);
+    color: #60a5fa;
+    font-size: 0.76rem;
+    font-weight: 700;
+    max-width: 100%;
+  }
+
+  .scan-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: rgba(15, 15, 15, 0.18);
+  }
+
+  .scan-overlay.is-active {
+    display: flex;
+  }
+
+  .scan-overlay::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -20%;
+    height: 18%;
+    background: linear-gradient(180deg, transparent, rgba(96, 165, 250, 0.1), rgba(37, 99, 235, 0.95), rgba(96, 165, 250, 0.16), transparent);
+    box-shadow: 0 0 22px rgba(37, 99, 235, 0.75), 0 0 36px rgba(96, 165, 250, 0.45);
+    animation: scanSweep 1.3s linear infinite;
+  }
+
+  .scan-message {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 1rem;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.28);
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    box-shadow: 0 0 18px rgba(37, 99, 235, 0.35);
+    backdrop-filter: blur(8px);
+    color: var(--text);
+    font-weight: 800;
+  }
+
+  .scan-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #60a5fa;
+    box-shadow: 0 0 12px rgba(96, 165, 250, 0.85);
+    animation: pulseDot 1s ease-in-out infinite;
+  }
+
+  @keyframes scanSweep {
+    0% {
+      transform: translateY(-20%);
+    }
+
+    100% {
+      transform: translateY(520%);
+    }
+  }
+
+  @keyframes pulseDot {
+    0%,
+    100% {
+      transform: scale(0.85);
+      opacity: 0.65;
+    }
+
+    50% {
+      transform: scale(1.18);
+      opacity: 1;
+    }
+  }
+
+  #imageUpload {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+  }
+
+  .detect-button {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    border: 0;
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    background: linear-gradient(135deg, #2563eb, #60a5fa);
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 12px 26px rgba(37, 99, 235, 0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  }
+
+  .detect-button:hover,
+  .detect-button:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 15px 30px rgba(96, 165, 250, 0.38);
+    filter: brightness(1.05);
+    outline: none;
+  }
+
+  .detect-button i {
+    font-size: 1rem;
+  }
+
+  .download-button {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    border: 0;
+    border-radius: 12px;
+    padding: 0.86rem 1rem;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #16a34a, #22c55e);
+    color: #f8fafc;
+    font-size: 0.95rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 10px 20px rgba(34, 197, 94, 0.3);
+    transition: transform 0.2s ease, filter 0.2s ease;
+  }
+
+  .share-button {
+    width: 100%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    border: 0;
+    border-radius: 12px;
+    padding: 0.86rem 1rem;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: #f8fafc;
+    font-size: 0.95rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 10px 20px rgba(124, 58, 237, 0.3);
+  }
+
+  .share-button.is-visible {
+    display: inline-flex;
+  }
+
+  .download-button:hover,
+  .download-button:focus-visible {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+    outline: none;
+  }
+
+  .upload-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .recent-detections {
+    display: none;
+    gap: 0.6rem;
+  }
+
+  .recent-detections.is-visible {
+    display: grid;
+  }
+
+  .recent-title {
+    margin: 0;
+    font-size: 0.86rem;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .recent-strip {
+    display: flex;
+    gap: 0.55rem;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .recent-thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 10px;
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    overflow: hidden;
+    background: rgba(15, 15, 15, 0.5);
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+
+  .recent-thumb:hover,
+  .recent-thumb:focus-visible {
+    transform: translateY(-1px);
+    border-color: #60a5fa;
+    outline: none;
+  }
+
+  .recent-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .stat-box {
+    background: rgba(15, 15, 15, 0.52);
+    border: 1px solid rgba(96, 165, 250, 0.16);
+    border-radius: 12px;
+    padding: 0.85rem 0.7rem;
+    text-align: center;
+  }
+
+  .stat-box i {
+    display: block;
+    margin-bottom: 0.45rem;
+    font-size: 1.1rem;
+    color: #60a5fa;
+  }
+
+  .stat-box strong {
+    display: block;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: var(--text);
+  }
+
+  .results-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .results-placeholder {
+    flex: 1;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 0.8rem;
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px dashed rgba(96, 165, 250, 0.25);
+    background: rgba(15, 15, 15, 0.35);
+    color: var(--muted);
+  }
+
+  .results-placeholder i {
+    font-size: 3rem;
+    color: #60a5fa;
+  }
+
+  .results-placeholder strong {
+    color: var(--text);
+    font-size: 1rem;
+  }
+
+  .results-image {
+    width: 100%;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    border-radius: 14px;
+    border: 1px solid rgba(96, 165, 250, 0.22);
+    background: rgba(15, 15, 15, 0.4);
+  }
+
+  .results-image img {
+    display: block;
+    width: 100%;
+    height: auto;
+    cursor: zoom-in;
+  }
+
+  .results-heading {
+    margin: 0 0 0.85rem;
+    font-size: 1.05rem;
+    color: var(--text);
+  }
+
+  .detected-count-heading {
+    margin: 0 0 0.85rem;
+    text-align: center;
+    font-size: 2rem;
+    line-height: 1.2;
+    font-weight: 800;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #ffffff;
+  }
+
+  .detected-count-number {
+    color: #60a5fa;
+  }
+
+  .detections-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .detection-card {
+    background: rgba(15, 15, 15, 0.55);
+    border: 1px solid rgba(96, 165, 250, 0.18);
+    border-radius: 14px;
+    padding: 0.9rem;
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.6s ease, transform 0.6s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+
+  .detection-card.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .detection-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    min-width: 0;
+  }
+
+  .detection-top strong {
+    color: var(--text);
+    font-size: 0.95rem;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  .percent {
+    color: var(--primary-light);
+    font-size: 0.85rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .confidence-track {
+    width: 100%;
+    height: 10px;
+    margin-top: 0.6rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.08);
+    border: 1px solid rgba(96, 165, 250, 0.12);
+  }
+
+  .confidence-fill {
+    --confidence-color: #60a5fa;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--confidence-color), color-mix(in srgb, var(--confidence-color) 75%, #ffffff));
+    box-shadow: 0 0 16px rgba(37, 99, 235, 0.4);
+    transition: width 1.05s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .image-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    padding: 1rem;
+  }
+
+  .toast-stack {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 350;
+    display: grid;
+    gap: 0.5rem;
+    pointer-events: none;
+  }
+
+  .toast {
+    min-width: 220px;
+    max-width: min(90vw, 360px);
+    padding: 0.7rem 0.9rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(20, 20, 30, 0.6);
+    backdrop-filter: blur(10px);
+    color: #f8fafc;
+    font-size: 0.86rem;
+    font-weight: 700;
+    transform: translateY(18px);
+    opacity: 0;
+    transition: transform 0.28s ease, opacity 0.28s ease;
+  }
+
+  .toast.is-showing {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .toast.toast-blue {
+    border-color: rgba(96, 165, 250, 0.5);
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.25);
+  }
+
+  .toast.toast-green {
+    border-color: rgba(34, 197, 94, 0.5);
+    box-shadow: 0 10px 24px rgba(34, 197, 94, 0.25);
+  }
+
+  .image-lightbox.is-open {
+    display: flex;
+    opacity: 1;
+  }
+
+  .lightbox-image {
+    max-width: min(92vw, 1100px);
+    max-height: 86vh;
+    width: auto;
+    height: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(96, 165, 250, 0.25);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  }
+
+  .lightbox-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(15, 15, 15, 0.65);
+    color: #f8fafc;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  .lightbox-close:hover,
+  .lightbox-close:focus-visible {
+    border-color: #60a5fa;
+    outline: none;
+  }
+
+  .detection-card.fill-animated .confidence-fill {
+    width: var(--confidence-width, 0%);
+  }
+
+  @media (max-width: 768px) {
+    .detect-grid {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+
+    .detect-page {
+      gap: 0.75rem;
+    }
+
+    .panel {
+      padding: 12px;
+    }
+
+    .upload-panel,
+    .results-panel {
+      gap: 0.75rem;
+    }
+
+    .upload-stats {
+      display: none;
+    }
+
+    .upload-box {
+      min-height: 300px;
+    }
+
+    .results-placeholder {
+      padding: 1.1rem;
+    }
+
+    .upload-stats {
+      grid-template-columns: 1fr;
+    }
+
+    .detection-top {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .percent {
+      white-space: normal;
+    }
+
+    .toast-stack {
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%);
+      bottom: 12px;
+    }
+
+    .detected-count-heading {
+      font-size: 1.5rem;
+    }
+  }
+</style>
+
+<section class="detect-page">
+  <canvas class="background-canvas" id="detect-neural-canvas" aria-hidden="true"></canvas>
+  <header class="detect-header">
+    <h1>Object Detection In Image</h1>
+    <p>Upload an image to preview it, scan it, and see detections appear with confidence bars.</p>
+  </header>
+
+  <div class="detect-grid">
+    <section class="panel upload-panel">
+      <form method="post" enctype="multipart/form-data" class="upload-form" id="uploadForm">
+        <label for="imageUpload" class="upload-box" id="uploadDropzone">
+          <input type="file" id="imageUpload" name="image" accept="image/*" required />
+
+          <div class="upload-stage">
+            <div class="upload-empty" id="uploadEmpty">
+              <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+              <h2 id="uploadTitle">Drop your image here</h2>
+              <p id="uploadHint">or click to browse</p>
+            </div>
+
+            <div class="upload-preview" id="previewShell" aria-live="polite">
+              <img id="previewImage" alt="Selected image preview" />
+            </div>
+
+            <div class="scan-overlay" id="scanOverlay" aria-hidden="true">
+              <div class="scan-message">
+                <span class="scan-dot"></span>
+                <span>Analyzing image...</span>
+              </div>
+            </div>
+          </div>
+        </label>
+
+        <div class="image-meta" id="imageMeta" aria-live="polite">
+          <span class="meta-pill" id="metaName"></span>
+          <span class="meta-pill" id="metaSize"></span>
+          <span class="meta-pill" id="metaDimensions"></span>
+        </div>
+
+        <button type="submit" class="detect-button">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <span>Detect Objects</span>
+        </button>
+      </form>
+
+      <div class="upload-stats" aria-label="Detection stats">
+        <div class="stat-box">
+          <i class="fa-solid fa-brain" aria-hidden="true"></i>
+          <strong>YOLOv8 Model</strong>
+        </div>
+        <div class="stat-box">
+          <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+          <strong>Real-time Detection</strong>
+        </div>
+        <div class="stat-box">
+          <i class="fa-solid fa-bullseye" aria-hidden="true"></i>
+          <strong>High Accuracy</strong>
+        </div>
+      </div>
+
+      <section class="recent-detections" id="recentDetections" aria-live="polite">
+        <h3 class="recent-title">Recent Detections</h3>
+        <div class="recent-strip" id="recentStrip"></div>
+      </section>
+    </section>
+
+    <section class="panel results-panel">
+      <h2 class="results-heading">Results</h2>
+
+      {% if image_url %}
+        <div class="results-image">
+          <img src="{{ image_url }}" alt="Detected Image" id="resultImage">
+        </div>
+
+        <button type="button" class="download-button" id="downloadResultButton">
+          <i class="fa-solid fa-download" aria-hidden="true"></i>
+          <span>Download Result</span>
+        </button>
+
+        <button type="button" class="share-button" id="shareResultButton">
+          <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+          <span>Share Result</span>
+        </button>
+
+        {% if detections %}
+          <h3 class="detected-count-heading" id="detectedCountHeading">
+            <span>Detected </span><span class="detected-count-number" id="detectedCountNumber">0</span><span> Objects</span>
+          </h3>
+          <ul class="detections-grid" id="detectionsGrid">
+            {% for item in detections %}
+              <li class="detection-card">
+                <div class="detection-top">
+                  <strong>{{ item.label }}</strong>
+                  <span class="percent">{{ item.confidence }}</span>
+                </div>
+                <div class="confidence-track" aria-hidden="true">
+                  <div class="confidence-fill"></div>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% else %}
+        <div class="results-placeholder">
+          <i class="fa-solid fa-image" aria-hidden="true"></i>
+          <strong>Your results will appear here</strong>
+          <p>Run detection to see the processed image and confidence breakdown.</p>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+</section>
+
+<div class="image-lightbox" id="imageLightbox" aria-hidden="true" role="dialog" aria-label="Image viewer">
+  <button type="button" class="lightbox-close" id="lightboxClose" aria-label="Close fullscreen image">
+    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+  </button>
+  <img class="lightbox-image" id="lightboxImage" alt="Fullscreen detection image">
+</div>
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<script>
+  (function () {
+    const form = document.getElementById('uploadForm');
+    const input = document.getElementById('imageUpload');
+    const dropzone = document.getElementById('uploadDropzone');
+    const uploadEmpty = document.getElementById('uploadEmpty');
+    const uploadTitle = document.getElementById('uploadTitle');
+    const uploadHint = document.getElementById('uploadHint');
+    const previewShell = document.getElementById('previewShell');
+    const previewImage = document.getElementById('previewImage');
+    const imageMeta = document.getElementById('imageMeta');
+    const metaName = document.getElementById('metaName');
+    const metaSize = document.getElementById('metaSize');
+    const metaDimensions = document.getElementById('metaDimensions');
+    const scanOverlay = document.getElementById('scanOverlay');
+    const detectButton = document.querySelector('.detect-button');
+    const detectionCards = Array.from(document.querySelectorAll('.detection-card'));
+    const canvas = document.getElementById('detect-neural-canvas');
+    const resultImage = document.getElementById('resultImage');
+    const downloadResultButton = document.getElementById('downloadResultButton');
+    const recentDetections = document.getElementById('recentDetections');
+    const recentStrip = document.getElementById('recentStrip');
+    const detectionsGrid = document.getElementById('detectionsGrid');
+    const detectedCountNumber = document.getElementById('detectedCountNumber');
+    const lightbox = document.getElementById('imageLightbox');
+    const lightboxImage = document.getElementById('lightboxImage');
+    const lightboxClose = document.getElementById('lightboxClose');
+    const toastStack = document.getElementById('toastStack');
+    const shareResultButton = document.getElementById('shareResultButton');
+
+    if (!form || !input || !dropzone || !uploadEmpty || !previewShell || !previewImage || !scanOverlay || !detectButton) {
+      return;
+    }
+
+    let previewUrl = null;
+    const historyKey = 'detectronv8.recentDetections';
+    let confettiFired = false;
+
+    const fireResultConfetti = () => {
+      if (confettiFired || typeof confetti !== 'function') {
+        return;
+      }
+
+      confettiFired = true;
+
+      const options = {
+        particleCount: 80,
+        spread: 60,
+        colors: ['#2563eb', '#60a5fa', '#7c3aed', '#ffffff']
+      };
+
+      confetti(Object.assign({}, options, {
+        angle: 60,
+        origin: { x: 0, y: 1 }
+      }));
+
+      confetti(Object.assign({}, options, {
+        angle: 120,
+        origin: { x: 1, y: 1 }
+      }));
+    };
+
+    const showToast = (message, variant) => {
+      if (!toastStack) return;
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + (variant === 'green' ? 'toast-green' : 'toast-blue');
+      toast.textContent = message;
+      toastStack.appendChild(toast);
+      window.requestAnimationFrame(() => {
+        toast.classList.add('is-showing');
+      });
+      window.setTimeout(() => {
+        toast.classList.remove('is-showing');
+        window.setTimeout(() => {
+          if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+          }
+        }, 280);
+      }, 3000);
+    };
+
+    const formatFileSize = (bytes) => {
+      if (!Number.isFinite(bytes)) return '0 KB';
+      const kb = bytes / 1024;
+      if (kb < 1024) return kb.toFixed(1) + ' KB';
+      return (kb / 1024).toFixed(2) + ' MB';
+    };
+
+    const setDragState = (isActive) => {
+      if (isActive) {
+        dropzone.classList.add('is-dragover');
+        if (uploadTitle) uploadTitle.textContent = 'Release to upload!';
+        if (uploadHint) uploadHint.textContent = 'Drop now to attach image';
+      } else {
+        dropzone.classList.remove('is-dragover');
+        if (uploadTitle) uploadTitle.textContent = 'Drop your image here';
+        if (uploadHint) uploadHint.textContent = 'or click to browse';
+      }
+    };
+
+    const parseConfidence = (text) => {
+      const cleaned = String(text || '').trim().replace('%', '');
+      const numeric = parseFloat(cleaned);
+
+      if (!Number.isFinite(numeric)) {
+        return 0;
+      }
+
+      return numeric > 1 ? Math.min(numeric, 100) : Math.min(numeric * 100, 100);
+    };
+
+    const getConfidenceColor = (value) => {
+      if (value > 80) return '#22c55e';
+      if (value >= 50) return '#eab308';
+      return '#ef4444';
+    };
+
+    const animateDetectedCount = () => {
+      if (!detectionsGrid || !detectedCountNumber) {
+        return;
+      }
+
+      const totalDetections = detectionsGrid.querySelectorAll('.detection-card').length;
+      let currentCount = 0;
+
+      detectedCountNumber.textContent = '0';
+
+      if (!totalDetections) {
+        return;
+      }
+
+      const counterTimer = window.setInterval(() => {
+        currentCount += 1;
+        detectedCountNumber.textContent = String(currentCount);
+
+        if (currentCount >= totalDetections) {
+          window.clearInterval(counterTimer);
+        }
+      }, 80);
+    };
+
+    const readHistory = () => {
+      try {
+        const raw = localStorage.getItem(historyKey);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        return [];
+      }
+    };
+
+    const writeHistory = (items) => {
+      try {
+        localStorage.setItem(historyKey, JSON.stringify(items));
+      } catch (error) {
+        return;
+      }
+    };
+
+    const openLightbox = (src) => {
+      if (!lightbox || !lightboxImage || !src) return;
+      lightboxImage.src = src;
+      lightbox.classList.add('is-open');
+      lightbox.setAttribute('aria-hidden', 'false');
+    };
+
+    const closeLightbox = () => {
+      if (!lightbox || !lightboxImage) return;
+      lightbox.classList.remove('is-open');
+      lightbox.setAttribute('aria-hidden', 'true');
+      window.setTimeout(() => {
+        lightboxImage.removeAttribute('src');
+      }, 220);
+    };
+
+    const renderHistory = () => {
+      if (!recentDetections || !recentStrip) {
+        return;
+      }
+
+      const history = readHistory();
+      recentStrip.innerHTML = '';
+
+      if (!history.length) {
+        recentDetections.classList.remove('is-visible');
+        return;
+      }
+
+      recentDetections.classList.add('is-visible');
+
+      history.forEach((url, index) => {
+        const thumbButton = document.createElement('button');
+        thumbButton.type = 'button';
+        thumbButton.className = 'recent-thumb';
+        thumbButton.setAttribute('aria-label', 'Open recent detection ' + (index + 1));
+        thumbButton.innerHTML = '<img src="' + url + '" alt="Recent detection thumbnail">';
+        thumbButton.addEventListener('click', () => openLightbox(url));
+        recentStrip.appendChild(thumbButton);
+      });
+    };
+
+    const pushToHistory = (url) => {
+      if (!url) return;
+      const existing = readHistory().filter((item) => item !== url);
+      existing.unshift(url);
+      writeHistory(existing.slice(0, 3));
+      renderHistory();
+    };
+
+    const showPreview = (file) => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        previewUrl = null;
+      }
+
+      if (!file || !file.type.startsWith('image/')) {
+        previewImage.removeAttribute('src');
+        previewShell.classList.remove('is-visible');
+        uploadEmpty.classList.remove('is-hidden');
+        if (imageMeta) imageMeta.classList.remove('is-visible');
+        return;
+      }
+
+      previewUrl = URL.createObjectURL(file);
+      previewImage.src = previewUrl;
+      previewShell.classList.add('is-visible');
+      uploadEmpty.classList.add('is-hidden');
+      previewImage.onload = () => {
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+          previewUrl = null;
+        }
+      };
+
+      if (metaName) metaName.textContent = file.name;
+      if (metaSize) metaSize.textContent = formatFileSize(file.size);
+
+      const dimensionImage = new Image();
+      dimensionImage.onload = () => {
+        if (metaDimensions) {
+          metaDimensions.textContent = dimensionImage.naturalWidth + 'x' + dimensionImage.naturalHeight;
+        }
+      };
+      dimensionImage.src = URL.createObjectURL(file);
+
+      if (imageMeta) imageMeta.classList.add('is-visible');
+      showToast('Image ready for detection ✓', 'blue');
+    };
+
+    const startScan = () => {
+      scanOverlay.classList.add('is-active');
+      detectButton.disabled = true;
+    };
+
+    const stopScan = () => {
+      scanOverlay.classList.remove('is-active');
+      detectButton.disabled = false;
+    };
+
+    input.addEventListener('change', () => {
+      showPreview(input.files && input.files[0]);
+    });
+
+    ['dragenter', 'dragover'].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setDragState(true);
+      });
+    });
+
+    ['dragleave', 'drop'].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setDragState(false);
+      });
+    });
+
+    dropzone.addEventListener('drop', (event) => {
+      const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      showPreview(file);
+    });
+
+    form.addEventListener('submit', (event) => {
+      const file = input.files && input.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      event.preventDefault();
+      startScan();
+
+      window.setTimeout(() => {
+        form.submit();
+      }, 1100);
+    });
+
+    if (detectionCards.length) {
+      animateDetectedCount();
+
+      const observer = 'IntersectionObserver' in window ? new IntersectionObserver((entries, observerInstance) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) {
+            return;
+          }
+
+          const card = entry.target;
+          const index = Number(card.dataset.index || 0);
+
+          window.setTimeout(() => {
+            card.classList.add('is-visible');
+
+            const percentText = card.querySelector('.percent');
+            const fill = card.querySelector('.confidence-fill');
+
+            if (percentText && fill) {
+              const confidenceValue = parseConfidence(percentText.textContent);
+              card.style.setProperty('--confidence-width', confidenceValue + '%');
+              fill.style.setProperty('--confidence-color', getConfidenceColor(confidenceValue));
+
+              window.requestAnimationFrame(() => {
+                card.classList.add('fill-animated');
+              });
+            }
+          }, index * 160);
+
+          observerInstance.unobserve(card);
+        });
+      }, {
+        threshold: 0.2
+      }) : null;
+
+      detectionCards.forEach((card, index) => {
+        card.dataset.index = index;
+
+        if (observer) {
+          observer.observe(card);
+        } else {
+          card.classList.add('is-visible');
+          const percentText = card.querySelector('.percent');
+          const fill = card.querySelector('.confidence-fill');
+
+          if (percentText && fill) {
+            const confidenceValue = parseConfidence(percentText.textContent);
+            card.style.setProperty('--confidence-width', confidenceValue + '%');
+            fill.style.setProperty('--confidence-color', getConfidenceColor(confidenceValue));
+            card.classList.add('fill-animated');
+          }
+        }
+      });
+    }
+
+    if (resultImage) {
+      pushToHistory(resultImage.src);
+      resultImage.addEventListener('click', () => openLightbox(resultImage.src));
+      showToast('Detection complete! ✓', 'green');
+      window.setTimeout(fireResultConfetti, 180);
+    }
+
+    renderHistory();
+
+    if (downloadResultButton && resultImage) {
+      downloadResultButton.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.href = resultImage.src;
+        link.download = 'detectronv8-result-' + Date.now() + '.jpg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+    }
+
+    if (shareResultButton) {
+      const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+      if (canShare && window.matchMedia('(max-width: 768px)').matches) {
+        shareResultButton.classList.add('is-visible');
+      }
+      shareResultButton.addEventListener('click', async () => {
+        if (!canShare) return;
+        try {
+          await navigator.share({
+            title: 'DetectronV8 Result',
+            url: window.location.href
+          });
+        } catch (error) {
+          return;
+        }
+      });
+    }
+
+    if (lightbox && lightboxClose) {
+      lightboxClose.addEventListener('click', closeLightbox);
+      lightbox.addEventListener('click', (event) => {
+        if (event.target === lightbox) {
+          closeLightbox();
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && lightbox.classList.contains('is-open')) {
+          closeLightbox();
+        }
+      });
+    }
+
+    if (canvas && canvas.getContext) {
+      const context = canvas.getContext('2d');
+      let dots = [];
+      let animationFrameId;
+
+      const resizeCanvas = () => {
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(window.innerWidth * ratio);
+        canvas.height = Math.floor(window.innerHeight * ratio);
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+        const area = window.innerWidth * window.innerHeight;
+        const dotCount = Math.max(20, Math.min(56, Math.floor(area / 18000)));
+        dots = [];
+
+        for (let i = 0; i < dotCount; i += 1) {
+          dots.push({
+            x: Math.random() * window.innerWidth,
+            y: Math.random() * window.innerHeight,
+            vx: (Math.random() - 0.5) * 0.35,
+            vy: (Math.random() - 0.5) * 0.35,
+            radius: 1.2 + Math.random() * 2.1
+          });
+        }
+      };
+
+      const draw = () => {
+        context.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        context.fillStyle = 'rgba(15, 15, 15, 0.08)';
+        context.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+        for (let i = 0; i < dots.length; i += 1) {
+          const dot = dots[i];
+          dot.x += dot.vx;
+          dot.y += dot.vy;
+
+          if (dot.x < 0 || dot.x > window.innerWidth) {
+            dot.vx *= -1;
+          }
+
+          if (dot.y < 0 || dot.y > window.innerHeight) {
+            dot.vy *= -1;
+          }
+
+          context.beginPath();
+          context.fillStyle = 'rgba(96, 165, 250, 0.9)';
+          context.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
+          context.fill();
+        }
+
+        for (let a = 0; a < dots.length; a += 1) {
+          for (let b = a + 1; b < dots.length; b += 1) {
+            const dx = dots[a].x - dots[b].x;
+            const dy = dots[a].y - dots[b].y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 140) {
+              context.beginPath();
+              context.strokeStyle = 'rgba(37, 99, 235, ' + (1 - distance / 140) * 0.35 + ')';
+              context.lineWidth = 1;
+              context.moveTo(dots[a].x, dots[a].y);
+              context.lineTo(dots[b].x, dots[b].y);
+              context.stroke();
+            }
+          }
+        }
+
+        animationFrameId = window.requestAnimationFrame(draw);
+      };
+
+      resizeCanvas();
+      draw();
+
+      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('beforeunload', () => {
+        if (animationFrameId) {
+          window.cancelAnimationFrame(animationFrameId);
+        }
+      });
+    }
+
+    stopScan();
+  })();
+</script>
+{% endblock %}

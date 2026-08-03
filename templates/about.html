@@ -1,0 +1,826 @@
+{% extends "base.html" %}
+{% block title %}About - YOLOv8{% endblock %}
+
+{% block extra_head %}
+<style>
+  html,
+  body {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a2e;
+    --primary: #2563eb;
+    --primary-light: #60a5fa;
+    --text: #f8fafc;
+    --muted: rgba(248, 250, 252, 0.74);
+    --border: rgba(96, 165, 250, 0.26);
+  }
+
+  body {
+    background:
+      linear-gradient(rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+      linear-gradient(rgba(96, 165, 250, 0.08) 2px, transparent 2px),
+      linear-gradient(90deg, rgba(96, 165, 250, 0.08) 2px, transparent 2px),
+      var(--bg);
+    background-size: 40px 40px, 40px 40px, 120px 120px, 120px 120px, auto;
+    color: var(--text);
+  }
+
+  * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  div,
+  section,
+  ul,
+  ol,
+  table,
+  p {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .about-page {
+    position: relative;
+    z-index: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: grid;
+    gap: 10px;
+    color: var(--text);
+  }
+
+  .background-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .hero {
+    width: 100%;
+    background:
+      radial-gradient(circle at 12% 14%, rgba(96, 165, 250, 0.18), transparent 44%),
+      linear-gradient(160deg, rgba(37, 99, 235, 0.2), transparent 42%),
+      var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 16px;
+    margin: 0 0 16px 0;
+    box-sizing: border-box;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .hero.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .hero h1 {
+    margin: 0;
+    font-size: clamp(1.7rem, 7vw, 2.7rem);
+    line-height: 1.15;
+    letter-spacing: 0.02em;
+  }
+
+  .glitch-title {
+    position: relative;
+    display: inline-block;
+    text-shadow: -1px 0 rgba(96, 165, 250, 0.35), 1px 0 rgba(124, 58, 237, 0.3);
+    animation: glitchJitter 2.6s steps(1, end) infinite;
+  }
+
+  .glitch-title::before,
+  .glitch-title::after {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .glitch-title::before {
+    color: rgba(96, 165, 250, 0.9);
+    text-shadow: -3px 0 rgba(37, 99, 235, 0.95);
+    animation: glitchPulse 2.6s steps(1, end) infinite;
+    mix-blend-mode: screen;
+  }
+
+  .glitch-title::after {
+    color: rgba(248, 250, 252, 0.98);
+    text-shadow: 3px 0 rgba(124, 58, 237, 0.95);
+    animation: glitchPulseAlt 2.6s steps(1, end) infinite;
+    mix-blend-mode: screen;
+  }
+
+  @keyframes glitchJitter {
+    0%,
+    83%,
+    100% {
+      transform: translate(0, 0) skew(0deg);
+      filter: none;
+    }
+
+    84% {
+      transform: translate(2px, 0) skew(-2deg);
+    }
+
+    86% {
+      transform: translate(-2px, 1px) skew(2deg);
+      filter: saturate(1.25);
+    }
+
+    88% {
+      transform: translate(1px, -1px) skew(-1deg);
+    }
+  }
+
+  @keyframes glitchPulse {
+    0%,
+    82%,
+    100% {
+      opacity: 0;
+      transform: translate(0, 0) skew(0deg);
+      clip-path: inset(0 0 0 0);
+    }
+
+    83% {
+      opacity: 0.95;
+      transform: translate(-4px, -1px) skew(10deg);
+      clip-path: inset(8% 0 72% 0);
+    }
+
+    86% {
+      opacity: 0.92;
+      transform: translate(4px, 1px) skew(-9deg);
+      clip-path: inset(58% 0 15% 0);
+    }
+
+    89% {
+      opacity: 0.75;
+      transform: translate(-2px, 2px) skew(4deg);
+      clip-path: inset(32% 0 43% 0);
+    }
+
+    91% {
+      opacity: 0.45;
+      transform: translate(1px, -1px) skew(-2deg);
+      clip-path: inset(74% 0 6% 0);
+    }
+  }
+
+  @keyframes glitchPulseAlt {
+    0%,
+    82%,
+    100% {
+      opacity: 0;
+      transform: translate(0, 0) skew(0deg);
+      clip-path: inset(0 0 0 0);
+    }
+
+    84% {
+      opacity: 0.9;
+      transform: translate(3px, 0) skew(-6deg);
+      clip-path: inset(18% 0 56% 0);
+    }
+
+    87% {
+      opacity: 0.95;
+      transform: translate(-4px, -1px) skew(8deg);
+      clip-path: inset(52% 0 18% 0);
+    }
+
+    90% {
+      opacity: 0.65;
+      transform: translate(2px, 1px) skew(-3deg);
+      clip-path: inset(36% 0 40% 0);
+    }
+  }
+
+  .hero p {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 0.98rem;
+    max-width: 100%;
+  }
+
+  .hero-subtitle {
+    min-height: 3.1rem;
+  }
+
+  .hero-subtitle.is-typing::after {
+    content: "|";
+    margin-left: 2px;
+    color: #60a5fa;
+    animation: cursorBlink 0.7s step-end infinite;
+  }
+
+  @keyframes cursorBlink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  .card {
+    width: 100%;
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.09), transparent 28%), var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 16px;
+    margin: 0 0 16px 0;
+    box-sizing: border-box;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease, transform 0.6s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+
+  .card.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 1.15rem;
+    color: var(--primary-light);
+  }
+
+  .card p,
+  .card li {
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .card ul,
+  .card ol {
+    margin: 0;
+    padding-left: 16px;
+  }
+
+  .table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .table-scroll table {
+    width: 100%;
+    min-width: 100%;
+    border-collapse: collapse;
+  }
+
+  .table-scroll th,
+  .table-scroll td {
+    padding: 11px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .table-scroll th {
+    background: rgba(37, 99, 235, 0.2);
+    color: var(--primary-light);
+    font-weight: 700;
+  }
+
+  .table-scroll tr:last-child td {
+    border-bottom: none;
+  }
+
+  code {
+    background: rgba(15, 15, 15, 0.65);
+    border: 1px solid var(--border);
+    color: var(--primary-light);
+    padding: 2px 7px;
+    border-radius: 8px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.9rem;
+  }
+
+  .contributors {
+    width: 100%;
+    display: grid;
+    gap: 12px;
+  }
+
+  .journey {
+    position: relative;
+    display: grid;
+    gap: 16px;
+    padding: 4px 0;
+  }
+
+  .journey::before {
+    content: "";
+    position: absolute;
+    left: 12px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, rgba(96, 165, 250, 0.4), rgba(37, 99, 235, 0.25));
+  }
+
+  .journey-step {
+    position: relative;
+    margin-left: 28px;
+    background: rgba(15, 15, 15, 0.46);
+    border: 1px solid rgba(96, 165, 250, 0.22);
+    border-radius: 14px;
+    padding: 12px;
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .journey-step.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .journey-step::before {
+    content: "";
+    position: absolute;
+    left: -22px;
+    top: 16px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #60a5fa;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22), 0 0 14px rgba(37, 99, 235, 0.75);
+  }
+
+  .journey-step h3 {
+    margin: 0 0 5px;
+    color: #f8fafc;
+    font-size: 1rem;
+  }
+
+  .journey-step h3 i {
+    color: #2563eb;
+    font-size: 1.1rem;
+    margin-right: 6px;
+  }
+
+  .journey-step p {
+    margin: 0;
+    color: rgba(248, 250, 252, 0.76);
+    line-height: 1.5;
+    font-size: 0.9rem;
+  }
+
+  .contributor {
+    width: 100%;
+    background: rgba(15, 15, 15, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 0 0 16px 0;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 16px;
+    align-items: center;
+    transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+  }
+
+  .contributor:hover {
+    box-shadow: 0 0 30px rgba(37, 99, 235, 0.72);
+    border-color: #2563eb;
+    transform: translateY(-4px);
+  }
+
+  .contributor-info {
+    min-width: 0;
+  }
+
+  .contributor img {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(96, 165, 250, 0.9);
+    box-shadow: 0 0 18px rgba(37, 99, 235, 0.55);
+    animation: photoPulse 2.2s ease-in-out infinite;
+  }
+
+  @keyframes photoPulse {
+    0%,
+    100% {
+      box-shadow: 0 0 10px rgba(37, 99, 235, 0.35);
+    }
+
+    50% {
+      box-shadow: 0 0 22px rgba(37, 99, 235, 0.75);
+    }
+  }
+
+  .contributor-info p {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    font-family: "Space Grotesk", "Inter", sans-serif;
+  }
+
+  .role {
+    display: inline-block;
+    margin: 8px 0 10px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.2);
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    box-shadow: 0 0 14px rgba(37, 99, 235, 0.28);
+    color: var(--primary-light);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .links {
+    display: flex;
+    flex-direction: row !important;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .links a {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    text-decoration: none;
+    background: rgba(37, 99, 235, 0.26);
+    border: 1px solid rgba(96, 165, 250, 0.42);
+    border-radius: 10px;
+    padding: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+
+  .links a:hover {
+    background: rgba(96, 165, 250, 0.26);
+    border-color: #60a5fa;
+    transform: translateY(-2px);
+    box-shadow: 0 0 14px rgba(37, 99, 235, 0.42);
+  }
+
+  @media (min-width: 768px) {
+    .about-page {
+      gap: 12px;
+    }
+
+    .hero,
+    .card {
+      padding: 16px;
+      border-radius: 10px;
+    }
+
+    .journey {
+      gap: 20px;
+    }
+
+    .journey::before {
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .journey-step {
+      width: calc(50% - 26px);
+      margin-left: 0;
+      padding: 14px;
+    }
+
+    .journey-step:nth-child(odd) {
+      margin-right: auto;
+    }
+
+    .journey-step:nth-child(even) {
+      margin-left: auto;
+    }
+
+    .journey-step::before {
+      left: auto;
+      right: -33px;
+      top: 18px;
+    }
+
+    .journey-step:nth-child(even)::before {
+      right: auto;
+      left: -33px;
+    }
+
+    .contributors {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .contributor {
+      grid-template-columns: 90px 1fr;
+      gap: 14px;
+    }
+
+    .contributor img {
+      width: 90px;
+      height: 90px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .about-page,
+    .hero,
+    .card,
+    .contributors,
+    .contributor,
+    .table-scroll {
+      width: 100%;
+      max-width: 100%;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="about-page">
+    <canvas class="background-canvas" id="about-neural-canvas" aria-hidden="true"></canvas>
+    <header class="hero">
+      <h1 class="glitch-title" data-text="DetectronV8">DetectronV8</h1>
+      <p class="hero-subtitle" id="hero-typing-subtitle">Real-time object detection powered by FastAPI and YOLOv8, designed to upload an image, process it, and present clear visual detections with confidence scores.</p>
+    </header>
+
+    <section class="card">
+      <h2>Goal</h2>
+      <ul>
+        <li>Upload an image and run YOLOv8 detection with a single flow.</li>
+        <li>Render the processed image with labels and bounding boxes.</li>
+        <li>Provide readable detection output with confidence values.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>How It Works</h2>
+      <ol>
+        <li>User uploads an image from the browser.</li>
+        <li>FastAPI stores the file and triggers detection logic.</li>
+        <li>YOLOv8 predicts classes and confidence for found objects.</li>
+        <li>Processed image and detection details are returned to the page.</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>Tech Stack</h2>
+      <ul>
+        <li>Backend: FastAPI</li>
+        <li>Model: YOLOv8 (Ultralytics)</li>
+        <li>Language: Python</li>
+        <li>Frontend: HTML and Jinja2 Templates</li>
+        <li>Image Processing: OpenCV</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Project Structure</h2>
+      <div class="table-scroll">
+        <table>
+          <tr><th>File / Folder</th><th>Description</th></tr>
+          <tr><td><code>main.py</code></td><td>FastAPI app and routes</td></tr>
+          <tr><td><code>media/uploads/</code></td><td>Uploaded input images</td></tr>
+          <tr><td><code>media/processed/</code></td><td>Processed result images</td></tr>
+          <tr><td><code>templates/</code></td><td>Frontend templates</td></tr>
+          <tr><td><code>utils.py</code></td><td>Detection and image processing logic</td></tr>
+          <tr><td><code>requirements.txt</code></td><td>Project dependencies</td></tr>
+          <tr><td><code>yolov8n.pt</code></td><td>YOLOv8 model weights</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Project Journey</h2>
+      <div class="journey" aria-label="Project journey timeline">
+        <article class="journey-step">
+          <h3><i class="fa-solid fa-lightbulb" aria-hidden="true"></i>Idea</h3>
+          <p>Identified the need for real-time object detection in a simple web interface</p>
+        </article>
+        <article class="journey-step">
+          <h3><i class="fa-solid fa-brain" aria-hidden="true"></i>Model</h3>
+          <p>Integrated YOLOv8 by Ultralytics for state-of-the-art object detection</p>
+        </article>
+        <article class="journey-step">
+          <h3><i class="fa-solid fa-gear" aria-hidden="true"></i>Backend</h3>
+          <p>Built FastAPI backend to handle image uploads and model inference</p>
+        </article>
+        <article class="journey-step">
+          <h3><i class="fa-solid fa-paintbrush" aria-hidden="true"></i>Frontend</h3>
+          <p>Designed mobile-first responsive UI with smooth animations</p>
+        </article>
+        <article class="journey-step">
+          <h3><i class="fa-solid fa-rocket" aria-hidden="true"></i>Launch</h3>
+          <p>Deployed and tested the complete detection pipeline end to end</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Contributors</h2>
+      <div class="contributors">
+        <div class="contributor">
+          <img src="/static/images/pfp_mohamin.jpg" alt="Mohamin Mushtaq Mir">
+          <div class="contributor-info">
+            <p>Mohamin Mushtaq Mir</p>
+            <div class="role">Frontend Developer</div>
+            <div class="links">
+              <a href="https://www.linkedin.com/in/moham7n/" target="_blank" rel="noopener noreferrer" aria-label="Mohamin LinkedIn"><i class="fa-brands fa-linkedin" aria-hidden="true"></i></a>
+              <a href="https://github.com/Mohamin007/" target="_blank" rel="noopener noreferrer" aria-label="Mohamin GitHub"><i class="fa-brands fa-github" aria-hidden="true"></i></a>
+            </div>
+          </div>
+        </div>
+
+        <div class="contributor">
+          <img src="/static/images/asrar.jpg" alt="Asrar Shah">
+          <div class="contributor-info">
+            <p>Asrar Shah</p>
+            <div class="role">Frontend Developer</div>
+            <div class="links">
+              <a href="https://www.linkedin.com/in/asrar-shah-aba315373" target="_blank" rel="noopener noreferrer" aria-label="Asrar LinkedIn"><i class="fa-brands fa-linkedin" aria-hidden="true"></i></a>
+              <a href="https://github.com/asrarshah60" target="_blank" rel="noopener noreferrer" aria-label="Asrar GitHub"><i class="fa-brands fa-github" aria-hidden="true"></i></a>
+            </div>
+          </div>
+        </div>
+
+        <div class="contributor">
+          <img src="/static/images/ikram.jpg" alt="Iqram Zargar">
+          <div class="contributor-info">
+            <p>Muhammad Iqram</p>
+            <div class="role">Backend Developer</div>
+            <div class="links">
+              <a href="https://www.linkedin.com/in/iqram-zargar-750709375" target="_blank" rel="noopener noreferrer" aria-label="Iqram LinkedIn"><i class="fa-brands fa-linkedin" aria-hidden="true"></i></a>
+              <a href="https://github.com/IqramZargar" target="_blank" rel="noopener noreferrer" aria-label="Iqram GitHub"><i class="fa-brands fa-github" aria-hidden="true"></i></a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      var revealItems = document.querySelectorAll('.about-page > .hero, .about-page > .card');
+      var journeyItems = document.querySelectorAll('.journey-step');
+      var canvas = document.getElementById('about-neural-canvas');
+      var heroSubtitle = document.getElementById('hero-typing-subtitle');
+
+      if (heroSubtitle) {
+        var fullText = heroSubtitle.textContent || '';
+        var currentIndex = 0;
+        heroSubtitle.textContent = '';
+        heroSubtitle.classList.add('is-typing');
+
+        var typeNextChar = function () {
+          if (currentIndex < fullText.length) {
+            heroSubtitle.textContent += fullText.charAt(currentIndex);
+            currentIndex += 1;
+            window.setTimeout(typeNextChar, 40);
+          } else {
+            heroSubtitle.classList.remove('is-typing');
+          }
+        };
+
+        typeNextChar();
+      }
+
+      if (!revealItems.length) {
+        revealItems = [];
+      }
+
+      if (!('IntersectionObserver' in window)) {
+        revealItems.forEach(function (item) {
+          item.classList.add('is-visible');
+        });
+        return;
+      }
+
+      var observer = new IntersectionObserver(function (entries, observerInstance) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) {
+            return;
+          }
+
+          entry.target.classList.add('is-visible');
+          observerInstance.unobserve(entry.target);
+        });
+      }, {
+        threshold: 0.18
+      });
+
+      revealItems.forEach(function (item) {
+        observer.observe(item);
+      });
+
+      journeyItems.forEach(function (item) {
+        observer.observe(item);
+      });
+
+      if (!canvas || !canvas.getContext) {
+        return;
+      }
+
+      var context = canvas.getContext('2d');
+      var dots = [];
+      var animationFrameId;
+
+      var resizeCanvas = function () {
+        var ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(window.innerWidth * ratio);
+        canvas.height = Math.floor(window.innerHeight * ratio);
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+        var area = window.innerWidth * window.innerHeight;
+        var dotCount = Math.max(20, Math.min(56, Math.floor(area / 18000)));
+        dots = [];
+
+        for (var i = 0; i < dotCount; i += 1) {
+          dots.push({
+            x: Math.random() * window.innerWidth,
+            y: Math.random() * window.innerHeight,
+            vx: (Math.random() - 0.5) * 0.35,
+            vy: (Math.random() - 0.5) * 0.35,
+            radius: 1.2 + Math.random() * 2.1
+          });
+        }
+      };
+
+      var draw = function () {
+        context.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        context.fillStyle = 'rgba(15, 15, 15, 0.08)';
+        context.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+        for (var i = 0; i < dots.length; i += 1) {
+          var dot = dots[i];
+          dot.x += dot.vx;
+          dot.y += dot.vy;
+
+          if (dot.x < 0 || dot.x > window.innerWidth) {
+            dot.vx *= -1;
+          }
+
+          if (dot.y < 0 || dot.y > window.innerHeight) {
+            dot.vy *= -1;
+          }
+
+          context.beginPath();
+          context.fillStyle = 'rgba(96, 165, 250, 0.9)';
+          context.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
+          context.fill();
+        }
+
+        for (var a = 0; a < dots.length; a += 1) {
+          for (var b = a + 1; b < dots.length; b += 1) {
+            var dx = dots[a].x - dots[b].x;
+            var dy = dots[a].y - dots[b].y;
+            var distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 140) {
+              context.beginPath();
+              context.strokeStyle = 'rgba(37, 99, 235, ' + (1 - distance / 140) * 0.35 + ')';
+              context.lineWidth = 1;
+              context.moveTo(dots[a].x, dots[a].y);
+              context.lineTo(dots[b].x, dots[b].y);
+              context.stroke();
+            }
+          }
+        }
+
+        animationFrameId = window.requestAnimationFrame(draw);
+      };
+
+      resizeCanvas();
+      draw();
+
+      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('beforeunload', function () {
+        if (animationFrameId) {
+          window.cancelAnimationFrame(animationFrameId);
+        }
+      });
+    })();
+  </script>
+{% endblock %}
