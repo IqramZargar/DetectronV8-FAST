@@ -1,0 +1,14 @@
+# Virtual environment
+venv/
+.env/
+
+# Media uploads
+media/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE files
+.vscode/
+.idea/
